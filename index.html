@@ -130,7 +130,7 @@
       .lr-btns button{ min-height:96px; border:none; border-radius:16px; font-family:"Jua",sans-serif; font-size:26px; color:#fff; touch-action:manipulation; user-select:none; }
       .fall-area{ position:relative; height:320px; background:var(--surface2); border-radius:14px; overflow:hidden; }
       .fall-line{ position:absolute; left:0; right:0; bottom:64px; height:4px; background:var(--accent); }
-      .note{ position:absolute; width:56px; height:56px; border-radius:50%; background:var(--c2); color:#fff; display:flex; align-items:center; justify-content:center; font-size:24px; transform:translateX(-50%); }
+      .fall-note{ position:absolute; width:56px; height:56px; border-radius:50%; background:var(--c2); color:#fff; display:flex; align-items:center; justify-content:center; font-size:24px; transform:translateX(-50%); }
       .react-area{ height:290px; border-radius:16px; display:flex; align-items:center; justify-content:center; text-align:center; font-family:"Jua",sans-serif; font-size:27px; color:#fff; padding:16px; user-select:none; touch-action:manipulation; border:none; width:100%; }
       .tower-area{ position:relative; height:330px; background:var(--surface2); border-radius:14px; overflow:hidden; }
       .tblock{ position:absolute; height:26px; border-radius:5px; }
@@ -211,6 +211,7 @@
       .code-big{ font-family:"Jua",sans-serif; font-size:clamp(44px,10vw,64px); letter-spacing:.14em; text-align:center; line-height:1.15; }
       .qr-box{ display:flex; justify-content:center; padding:10px 0 4px; }
       .qr-box svg,.qr-box img{ width:200px; height:200px; background:#fff; border-radius:12px; padding:8px; }
+      .join-link{ display:block; text-align:center; font-weight:700; font-size:14.5px; word-break:break-all; color:var(--c2); margin-top:6px; }
       .team-edit-row{ display:flex; gap:8px; margin-bottom:8px; align-items:center; }
       .team-edit-row .swatch{ width:18px; height:18px; border-radius:6px; flex:none; }
       .team-edit-row input{ flex:1; min-height:48px; border:2px solid var(--line); border-radius:10px; padding:0 12px; font-size:16px; background:var(--surface); color:var(--ink); min-width:0; }
@@ -297,6 +298,10 @@
             <label for="hostKey">Publishable key (default) — 미리 입력되어 있어요. 필요하면 수정하세요</label>
             <input class="rt-input" id="hostKey" type="text" value="sb_publishable_gGY3hYQRDjHPxup1oS9Vng_DZV91-id" placeholder="Publishable key" autocomplete="off" />
           </div>
+          <div class="field">
+            <label for="hostJoinUrl">참가자 접속 주소 — QR에 들어가는 공개 주소예요. 참가자가 실제로 접속하는 주소와 같아야 해요</label>
+            <input class="rt-input" id="hostJoinUrl" type="text" value="https://teamgame-25-minigame-ph-d-lles-projects.vercel.app/" autocomplete="off" />
+          </div>
           <button class="bigbtn" id="hostCreateBtn" type="button">방 만들기</button>
           <div class="status-line"><span class="dot" id="hostDot"></span><span id="hostStatus">아직 연결되지 않았어요.</span></div>
           <div class="warn-box">
@@ -307,10 +312,11 @@
 
         <div class="rt-panel" id="hostRoomPanel" hidden>
           <h3>참가자 입장 안내</h3>
-          <p class="note" style="margin-bottom:2px;">참가자는 폰에서 이 페이지를 열고 <b>실시간 · 참가자</b>를 고른 뒤, 아래 방 코드를 입력하거나 QR을 스캔하면 돼요.</p>
+          <p class="note" style="margin-bottom:2px;">참가자는 폰 카메라로 아래 QR을 찍으면 돼요. 참가자 화면이 바로 열리고 방 코드까지 자동으로 입력됩니다. QR이 안 되면 아래 주소를 직접 열거나, 방 코드를 입력해도 돼요.</p>
           <div class="code-big" id="hostRoomCode">------</div>
           <div class="qr-box" id="hostQr"></div>
-          <p class="note" style="text-align:center;">QR에는 방 코드가 담겨 있어요. 참가자 화면에도 같은 Publishable key가 미리 입력되어 있어 바로 연결됩니다.</p>
+          <a class="join-link" id="hostJoinLink" href="#" target="_blank" rel="noopener"></a>
+          <p class="note" style="text-align:center;">QR에는 숫자만 담는 게 아니라, 위 접속 주소 전체가 들어 있어요. 참가자 화면에도 같은 Publishable key가 미리 입력되어 있어 바로 연결됩니다.</p>
         </div>
 
         <div class="rt-panel" id="hostTeamPanel" hidden>
@@ -887,7 +893,7 @@
         var spawnIv=ctx.every(function(){
           if(spawned>=TOTAL){ ctx.clearT(spawnIv); return; }
           spawned++;
-          var el=h("div","note","♪"); el.style.left=rand(15,85)+"%"; el.style.top="-56px";
+          var el=h("div","fall-note","♪"); el.style.left=rand(15,85)+"%"; el.style.top="-56px";
           area.appendChild(el);
           notes.push({el:el, t0:performance.now(), done:false});
           api.setTime("노트 "+spawned+" / "+TOTAL);
@@ -1729,6 +1735,30 @@
        ================================================================ */
     var DEFAULT_SUPABASE_URL = "https://ncjhvljdzvzmwdiyxvln.supabase.co";
     var DEFAULT_SUPABASE_KEY = "sb_publishable_gGY3hYQRDjHPxup1oS9Vng_DZV91-id";
+    /* 참가자 공개 접속 주소 (Vercel 배포 주소). QR은 숫자 코드만이 아니라
+       이 주소 + ?room=코드 전체를 담아야 폰 카메라가 링크로 인식해 페이지를 연다. */
+    var DEFAULT_JOIN_URL = "https://teamgame-25-minigame-ph-d-lles-projects.vercel.app/";
+    function joinBaseUrl(){
+      var inp=rtEl("hostJoinUrl");
+      var v = inp ? inp.value.trim() : "";
+      if(!/^https?:\/\//i.test(v)) v = DEFAULT_JOIN_URL;
+      return v;
+    }
+    function buildJoinUrl(code){
+      var base=joinBaseUrl();
+      var sep="?";
+      if(base.indexOf("?")>=0) sep = (base.slice(-1)==="?" || base.slice(-1)==="&") ? "" : "&";
+      return base + sep + "room=" + encodeURIComponent(code);
+    }
+    function parseRoomCode(text){
+      var s=String(text||"");
+      var m=s.match(/[?#&](?:room|code)=([0-9]{4,6})/);
+      if(m) return m[1];
+      var digits=s.replace(/[^0-9]/g,"");
+      /* 순수 숫자 QR(옛 방식) 호환: 주소가 아닌 짧은 숫자만 코드로 인정 */
+      if(!/https?:\/\//i.test(s) && digits.length>=4 && digits.length<=6) return digits;
+      return "";
+    }
     var RT_TEAM_COLORS = ["#ff5a3c","#2f6fed","#0e9f8a","#e07b00","#d64570","#7c4dff","#00838f","#5d8a00","#b03060","#4a5a74"];
     function rtEl(id){ return document.getElementById(id); }
     function rtUid(){ return "c" + Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
@@ -1953,15 +1983,19 @@
     }
     function hostRenderQr(){
       var box=rtEl("hostQr"); box.innerHTML="";
+      var joinUrl=buildJoinUrl(host.code);
+      var link=rtEl("hostJoinLink");
+      if(link){ link.textContent=joinUrl; link.href=joinUrl; }
       try{
         if(typeof qrcode!=="undefined"){
-          var qr=qrcode(0,"M"); qr.addData(host.code); qr.make();
+          var qr=qrcode(0,"M"); qr.addData(joinUrl); qr.make();
           box.innerHTML=qr.createSvgTag({ cellSize:6, margin:8, scalable:true });
           return;
         }
       }catch(e){}
-      box.appendChild(h("p","note","QR을 만들지 못했어요. 참가자에게 방 코드를 직접 알려 주세요."));
+      box.appendChild(h("p","note","QR을 만들지 못했어요. 참가자에게 위 접속 주소를 열라고 하거나 방 코드를 직접 알려 주세요."));
     }
+    rtEl("hostJoinUrl").addEventListener("input", function(){ if(host.code) hostRenderQr(); });
     rtEl("hostCreateBtn").addEventListener("click", hostConnect);
     rtEl("hostReconnect").addEventListener("click", hostConnect);
 
@@ -2057,10 +2091,11 @@
       box.hidden=false; box.innerHTML="";
       var sc=new Html5Qrcode("qrReader"); client.scanner=sc;
       sc.start({ facingMode:"environment" }, { fps:8, qrbox:220 }, function(text){
-        var m=String(text).replace(/[^0-9]/g,"");
-        if(m){ rtEl("clientCode").value=m.slice(0,6); }
+        var code=parseRoomCode(text);
+        if(code){ rtEl("clientCode").value=code; }
         try{ sc.stop(); }catch(e){} client.scanner=null; box.hidden=true;
-        rtSetStatus("clientDot","clientStatus","wait","방 코드를 읽었어요: "+rtEl("clientCode").value+" · 입장하기를 눌러 주세요.");
+        if(code) rtSetStatus("clientDot","clientStatus","wait","방 코드를 읽었어요: "+code+" · 닉네임을 적고 입장하기를 눌러 주세요.");
+        else rtSetStatus("clientDot","clientStatus","err","QR에서 방 코드를 찾지 못했어요. 방 코드를 직접 입력해 주세요.");
       }, function(){}).catch(function(){
         box.innerHTML="<p class='note'>카메라를 열지 못했어요. 방 코드를 직접 입력해 주세요.</p>"; client.scanner=null;
       });
@@ -2237,6 +2272,20 @@
         rtEl("cheerZone").hidden=false;
       }
     }
+
+    /* ============ QR 접속 링크로 들어온 참가자 자동 안내 ============
+       QR이 담은 주소(?room=25791)로 열면 참가자 화면으로 바로 이동하고
+       방 코드를 미리 채운다. 닉네임만 적고 입장하면 된다. */
+    (function(){
+      var code="";
+      try{ code=parseRoomCode(window.location.search) || parseRoomCode(window.location.hash); }catch(e){}
+      if(!code) return;
+      rtEl("clientCode").value=code;
+      showView("client");
+      rtSetStatus("clientDot","clientStatus","wait","방 코드 "+code+" 가 입력됐어요. 닉네임을 적고 '방 입장하기'를 눌러 주세요.");
+      var nick=rtEl("clientNick");
+      if(nick){ try{ nick.focus({ preventScroll:true }); }catch(e){ nick.focus(); } }
+    })();
     </script>
   </body>
 </html>
