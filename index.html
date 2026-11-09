@@ -347,9 +347,21 @@
 
         <div class="rt-panel" id="hostTeamPanel" hidden>
           <h3>팀 목록 (최대 10팀)</h3>
-          <div id="hostTeamList"></div>
+          <h4 style="margin-top:2px;">팀 배정 방식 · 진행자가 선택</h4>
+          <div class="seg" id="hostJoinModeSeg" role="group" aria-label="팀 배정 방식">
+            <button type="button" id="jmFree" class="on">1. 자유 선택</button>
+            <button type="button" id="jmLimit">2. 인원 제한</button>
+            <button type="button" id="jmAuto">3. 자동 배분</button>
+          </div>
+          <p class="note" id="hostJoinModeDesc" style="margin-top:8px;">자유 선택 (기본) · 참가자가 원하는 팀을 직접 고릅니다. 인원 제한이 없어 지금과 같은 방식이에요.</p>
+          <div class="field" id="hostCapField" hidden>
+            <label for="hostMaxPerTeam">팀당 최대 인원 (명)</label>
+            <input class="rt-input" id="hostMaxPerTeam" type="number" inputmode="numeric" min="1" max="100" step="1" value="10" />
+            <p class="note" style="margin-top:6px; margin-bottom:0;">예: 참가자 100명 · 10팀이면 팀당 10명이 적당해요. 꽉 찬 팀은 참가자 화면에서 마감으로 표시되어 고를 수 없어요.</p>
+          </div>
+          <div id="hostTeamList" style="margin-top:14px;"></div>
           <button class="mini-btn" id="hostTeamAdd" type="button">+ 팀 추가</button>
-          <p class="note" style="margin-top:10px;">팀 이름을 바꾸면 참가자 화면의 팀 선택 목록에 바로 반영돼요.</p>
+          <p class="note" style="margin-top:10px;">팀 이름·배정 방식을 바꾸면 참가자 화면에 바로 반영돼요.</p>
           <h4>접속 중인 참가자 <span id="hostPlayerCnt"></span></h4>
           <div id="hostPlayers"><p class="note">아직 접속한 참가자가 없어요.</p></div>
         </div>
@@ -422,9 +434,12 @@
         <div class="rt-panel" id="clientWaitPanel" hidden>
           <h3>대기실</h3>
           <div class="status-line"><span class="dot ok" id="clientDot2"></span><span id="clientWaitStatus">연결됨 · 방 <b id="clientRoomEcho"></b></span></div>
-          <div class="field">
+          <div class="field" id="clientTeamField">
             <label for="clientTeamSel">내 팀 선택</label>
             <select class="rt-input" id="clientTeamSel"></select>
+          </div>
+          <div class="warn-box" id="clientAutoInfo" hidden style="margin-bottom:12px;">
+            <b>자동 배분 방식이에요</b> · 팀을 직접 고르지 않아도 돼요. 아래 버튼을 누르면 지금 인원이 가장 적은 팀으로 자동 배정됩니다.
           </div>
           <button class="bigbtn teal" id="clientTeamBtn" type="button">이 팀으로 참가 확정</button>
           <p class="note" id="clientTeamMsg" style="margin-top:10px;">팀을 고르고 참가 확정을 눌러 주세요.</p>
@@ -1846,8 +1861,58 @@
       playing:false, gameId:null, repMode:false,
       repWinners:{},         // team -> clientId
       cumulative:{},         // team -> {sum, games}
-      teamsTimer:null
+      teamsTimer:null,
+      joinMode:"free",       // free(1.자유 선택·기본) | limit(2.팀당 인원 제한) | auto(3.자동 배분)
+      maxPerTeam:10
     };
+    var JOIN_MODE_DESCS = {
+      free:"자유 선택 (기본) · 참가자가 원하는 팀을 직접 고릅니다. 인원 제한이 없어 지금과 같은 방식이에요.",
+      limit:"인원 제한 · 아래에서 정한 팀당 최대 인원까지만 들어갈 수 있어요. 꽉 찬 팀은 마감으로 표시되고, 동시에 마지막 자리를 누른 경우 늦은 참가자는 다시 고르게 안내합니다.",
+      auto:"자동 배분 · 참가자가 팀을 고르지 않고, 버튼을 누르면 그 순간 인원이 가장 적은 팀으로 자동 배정됩니다. 한쪽 팀에 몰리지 않아요."
+    };
+    /* presence + players(join 확정분)를 합친 팀별 인원. presence 반영이 늦어도
+       방금 확정·배정된 참가자를 중복 없이 세어 제한·배분 판단에 쓴다. */
+    function hostCombinedCounts(excludeId){
+      var counts={}, seen={};
+      host.teamNames.forEach(function(n){ counts[n]=0; });
+      Object.keys(host.presence).forEach(function(id){
+        if(id===excludeId) return;
+        var t=host.presence[id].team;
+        if(t && counts.hasOwnProperty(t)){ counts[t]++; seen[id]=1; }
+      });
+      Object.keys(host.players).forEach(function(id){
+        if(id===excludeId || seen[id]) return;
+        var t=host.players[id].team;
+        if(t && counts.hasOwnProperty(t)){ counts[t]++; seen[id]=1; }
+      });
+      return counts;
+    }
+    function hostPickAutoTeam(excludeId){
+      var counts=hostCombinedCounts(excludeId), best=null, bestCnt=null;
+      host.teamNames.forEach(function(name){
+        var c=counts[name]||0;
+        if(bestCnt===null || c<bestCnt){ bestCnt=c; best=name; }
+      });
+      return best;
+    }
+    function hostSyncJoinModeUI(){
+      var m=host.joinMode;
+      rtEl("jmFree").classList.toggle("on", m==="free");
+      rtEl("jmLimit").classList.toggle("on", m==="limit");
+      rtEl("jmAuto").classList.toggle("on", m==="auto");
+      rtEl("hostJoinModeDesc").textContent=JOIN_MODE_DESCS[m];
+      rtEl("hostCapField").hidden = m!=="limit";
+      var capInp=rtEl("hostMaxPerTeam");
+      if(String(host.maxPerTeam)!==capInp.value) capInp.value=host.maxPerTeam;
+    }
+    function hostSetJoinMode(mode){
+      if(mode!=="free" && mode!=="limit" && mode!=="auto") mode="free";
+      host.joinMode=mode;
+      var v=parseInt(rtEl("hostMaxPerTeam").value,10);
+      if(!isNaN(v)) host.maxPerTeam=clamp(v,1,100);
+      hostSyncJoinModeUI();
+      hostBroadcastTeams();
+    }
 
     function hostRenderTeams(){
       var wrap=rtEl("hostTeamList"); wrap.innerHTML="";
@@ -1861,7 +1926,8 @@
         });
         row.appendChild(inp);
         var cnt=h("span",null,""); cnt.style.cssText="font-size:13px;color:var(--ink-soft);white-space:nowrap;";
-        cnt.textContent = hostTeamMembers(i).length + "명";
+        var cc=hostCombinedCounts(null), cnum=cc[name]||0;
+        cnt.textContent = host.joinMode==="limit" ? (cnum + " / " + host.maxPerTeam + "명" + (cnum>=host.maxPerTeam ? " · 마감" : "")) : (cnum + "명");
         row.appendChild(cnt);
         if(host.teamNames.length>1){
           var del=h("button","mini-btn","삭제"); del.type="button";
@@ -1930,8 +1996,29 @@
     }
     function hostBroadcastTeams(){
       if(!host.ch) return;
-      host.ch.send({ type:"broadcast", event:"teams", payload:{ teams:host.teamNames.slice() } });
+      host.ch.send({ type:"broadcast", event:"teams", payload:{
+        teams:host.teamNames.slice(),
+        joinMode:host.joinMode,
+        maxPerTeam:host.maxPerTeam,
+        counts:hostCombinedCounts(null)
+      } });
     }
+    rtEl("jmFree").addEventListener("click", function(){ hostSetJoinMode("free"); });
+    rtEl("jmLimit").addEventListener("click", function(){ hostSetJoinMode("limit"); });
+    rtEl("jmAuto").addEventListener("click", function(){ hostSetJoinMode("auto"); });
+    rtEl("hostMaxPerTeam").addEventListener("input", function(){
+      var v=parseInt(rtEl("hostMaxPerTeam").value,10);
+      if(isNaN(v)) return;
+      host.maxPerTeam=clamp(v,1,100);
+      if(host.joinMode==="limit") hostBroadcastTeams();
+    });
+    rtEl("hostMaxPerTeam").addEventListener("change", function(){
+      var v=parseInt(rtEl("hostMaxPerTeam").value,10);
+      host.maxPerTeam=isNaN(v)?10:clamp(v,1,100);
+      rtEl("hostMaxPerTeam").value=host.maxPerTeam;
+      hostBroadcastTeams();
+    });
+    hostSyncJoinModeUI();
     function hostBroadcastState(phase){
       if(!host.ch) return;
       host.ch.send({ type:"broadcast", event:"state", payload:{ phase:phase, gameId:host.gameId, repMode:host.repMode } });
@@ -1945,6 +2032,8 @@
       });
       host.presence=pres;
       hostRenderPlayers(); hostRenderRace(); hostRenderTeams();
+      /* 인원 변동(입장·퇴장)을 참가자 화면의 (n/최대) 표시·마감 상태에 즉시 반영 */
+      try{ hostBroadcastTeams(); }catch(e){}
     }
 
     function hostConnect(){
@@ -1960,8 +2049,32 @@
         ch.on("presence", { event:"sync" }, hostSyncPresence);
         ch.on("broadcast", { event:"join" }, function(msg){
           var p=msg.payload||{};
-          if(p.clientId){ host.players[p.clientId]={ nick:p.nick, team:p.team, score:host.players[p.clientId]?host.players[p.clientId].score:null, fin:false }; }
-          hostBroadcastTeams(); hostRenderPlayers();
+          if(!p.clientId) return;
+          var prevScore=host.players[p.clientId]?host.players[p.clientId].score:null;
+          /* 3. 자동 배분: 진행자(Host)가 그 순간 인원이 가장 적은 팀으로 확정한다.
+             방금 배정한 결과를 host.players에 즉시 남겨, presence 반영이 늦어도
+             다음 배정이 같은 팀으로 몰리지 않게 한다. */
+          if(host.joinMode==="auto" || p.auto){
+            var assigned=hostPickAutoTeam(p.clientId);
+            if(!assigned){ ch.send({ type:"broadcast", event:"join-rejected", payload:{ clientId:p.clientId, reason:"noteam", msg:"아직 팀이 준비되지 않았어요. 잠시 후 다시 눌러 주세요." } }); return; }
+            host.players[p.clientId]={ nick:p.nick, team:assigned, score:prevScore, fin:false };
+            ch.send({ type:"broadcast", event:"team-assigned", payload:{ clientId:p.clientId, nick:p.nick, team:assigned } });
+            hostBroadcastTeams(); hostRenderPlayers(); hostRenderTeams();
+            return;
+          }
+          /* 2. 인원 제한: 꽉 찬 팀은 확정하지 않고 다시 고르게 돌려보낸다.
+             동시에 마지막 자리를 누른 경우에도 Host 판정 기준으로 늦은 쪽이 안내를 받는다. */
+          if(host.joinMode==="limit" && p.team){
+            var counts=hostCombinedCounts(p.clientId);
+            if((counts[p.team]||0) >= host.maxPerTeam){
+              ch.send({ type:"broadcast", event:"join-rejected", payload:{ clientId:p.clientId, team:p.team, reason:"full", cap:host.maxPerTeam, msg:"'"+p.team+"' 팀이 정원("+host.maxPerTeam+"명)을 다 찼어요. 다른 팀을 선택해 주세요." } });
+              hostBroadcastTeams();
+              return;
+            }
+          }
+          /* 1. 자유 선택(기본) 및 제한 통과 시 기존 방식 그대로 확정 */
+          host.players[p.clientId]={ nick:p.nick, team:p.team, score:prevScore, fin:false };
+          hostBroadcastTeams(); hostRenderPlayers(); hostRenderTeams();
         });
         ch.on("broadcast", { event:"teams-request" }, function(msg){
           hostBroadcastTeams();
@@ -2133,10 +2246,19 @@
       teamNames:[],
       teamsLoaded:false, teamsReqTimers:[],
       inGame:false, lastScore:0, lastSent:null, finalSent:false,
-      scoreTimer:null, watchTimer:null, repMode:false, isRep:false, scanner:null
+      scoreTimer:null, watchTimer:null, repMode:false, isRep:false, scanner:null,
+      joinMode:"free", maxPerTeam:10, teamCounts:{}, assignPending:false
     };
+    function clientTeamCount(name){
+      var c=client.teamCounts ? client.teamCounts[name] : null;
+      return (typeof c==="number") ? c : 0;
+    }
+    function clientTeamIsFull(name){
+      return client.joinMode==="limit" && name!==client.team && clientTeamCount(name) >= client.maxPerTeam;
+    }
     function clientFillTeams(){
       var sel=rtEl("clientTeamSel"); var btn=rtEl("clientTeamBtn"); var msg=rtEl("clientTeamMsg");
+      var field=rtEl("clientTeamField"), autoInfo=rtEl("clientAutoInfo");
       var prev=sel.value;
       sel.innerHTML="";
       if(!client.teamsLoaded || !client.teamNames.length){
@@ -2146,13 +2268,46 @@
         if(msg && !rtEl("clientWaitPanel").hidden) msg.textContent="진행자가 설정한 팀 목록을 불러오는 중이에요. 잠시만 기다려 주세요.";
         return;
       }
+      /* 3. 자동 배분: 선택 목록을 숨기고 배정 버튼만 보여준다 */
+      if(client.joinMode==="auto"){
+        if(field) field.hidden=true;
+        if(autoInfo) autoInfo.hidden=false;
+        sel.disabled=true;
+        if(btn){
+          if(client.team){
+            btn.disabled=true;
+            btn.textContent="✓ '"+client.team+"' 팀으로 배정됐어요";
+          } else if(client.assignPending){
+            btn.disabled=true;
+            btn.textContent="배정 중… 잠시만 기다려 주세요";
+          } else {
+            btn.disabled=false;
+            btn.textContent="자동으로 팀 배정받기";
+          }
+        }
+        return;
+      }
+      if(field) field.hidden=false;
+      if(autoInfo) autoInfo.hidden=true;
       sel.disabled=false;
-      if(btn) btn.disabled=false;
+      if(btn){ btn.disabled=false; btn.textContent="이 팀으로 참가 확정"; }
       client.teamNames.forEach(function(name){
-        var o=document.createElement("option"); o.value=name; o.textContent=name; sel.appendChild(o);
+        var o=document.createElement("option"); o.value=name;
+        if(client.joinMode==="limit"){
+          var cnt=clientTeamCount(name), full=clientTeamIsFull(name);
+          o.textContent=name+" ("+cnt+"/"+client.maxPerTeam+"명)"+(full?" · 마감":"");
+          if(full) o.disabled=true;
+        } else {
+          o.textContent=name;
+        }
+        sel.appendChild(o);
       });
-      if(prev && client.teamNames.indexOf(prev)>=0) sel.value=prev;
+      if(prev && client.teamNames.indexOf(prev)>=0 && !clientTeamIsFull(prev)) sel.value=prev;
       else if(client.team && client.teamNames.indexOf(client.team)>=0) sel.value=client.team;
+      else {
+        /* 이전 선택이 마감됐으면 고를 수 있는 첫 팀으로 옮겨 둔다 */
+        for(var i=0;i<sel.options.length;i++){ if(!sel.options[i].disabled){ sel.selectedIndex=i; break; } }
+      }
     }
     function clientClearTeamsReqTimers(){
       client.teamsReqTimers.forEach(function(t){ clearTimeout(t); });
@@ -2200,12 +2355,16 @@
       try{
         if(client.sb){ try{ client.sb.removeAllChannels(); }catch(e){} }
         client.sb=rtMakeClient(url, key); client.code=code; client.nick=nick;
-        client.teamsLoaded=false; client.teamNames=[]; clientClearTeamsReqTimers(); clientFillTeams();
+        client.teamsLoaded=false; client.teamNames=[]; client.joinMode="free"; client.maxPerTeam=10; client.teamCounts={}; client.assignPending=false; clientClearTeamsReqTimers(); clientFillTeams();
         rtSetStatus("clientDot","clientStatus","wait","방 "+code+" 에 연결 중…");
         var ch=client.sb.channel("minigame-room-"+code, { config:{ broadcast:{ self:false }, presence:{ key:client.id } } });
         client.ch=ch;
         ch.on("broadcast", { event:"teams" }, function(msg){
-          var t=(msg.payload||{}).teams;
+          var pay=msg.payload||{};
+          var t=pay.teams;
+          if(pay.joinMode) client.joinMode=pay.joinMode;
+          if(typeof pay.maxPerTeam==="number" && pay.maxPerTeam>0) client.maxPerTeam=pay.maxPerTeam;
+          if(pay.counts) client.teamCounts=pay.counts;
           if(t && t.length){
             var wasFirstLoad=!client.teamsLoaded;
             client.teamNames=t.slice(0,10);
@@ -2213,16 +2372,44 @@
             clientClearTeamsReqTimers();
             var confirmedMissing = client.team && client.teamNames.indexOf(client.team)<0;
             if(confirmedMissing){
-              client.team="";
+              client.team=""; client.assignPending=false;
               try{ client.ch.track({ nick:client.nick, team:"" }); }catch(e){}
             }
             clientFillTeams();
             if(confirmedMissing){
               rtEl("clientTeamMsg").textContent="진행자 팀 목록이 바뀌어 이전에 고른 팀이 없어요. 팀을 다시 선택해 참가 확정을 눌러 주세요.";
             } else if(wasFirstLoad && !client.team){
-              rtEl("clientTeamMsg").textContent="팀을 고르고 참가 확정을 눌러 주세요.";
+              rtEl("clientTeamMsg").textContent = client.joinMode==="auto"
+                ? "자동 배분 방식이에요. 아래 버튼을 누르면 인원이 가장 적은 팀으로 배정됩니다."
+                : client.joinMode==="limit"
+                  ? "팀을 고르고 참가 확정을 눌러 주세요. 괄호 안 숫자가 현재 인원/정원이에요. 꽉 찬 팀은 고를 수 없어요."
+                  : "팀을 고르고 참가 확정을 눌러 주세요.";
             }
+          } else {
+            clientFillTeams();
           }
+        });
+        ch.on("broadcast", { event:"team-assigned" }, function(msg){
+          var p=msg.payload||{};
+          if(p.clientId!==client.id || !p.team) return;
+          client.team=p.team; client.assignPending=false;
+          try{ client.ch.track({ nick:client.nick, team:client.team }); }catch(e){}
+          clientFillTeams();
+          rtEl("clientTeamMsg").textContent="✓ 자동으로 '"+client.team+"' 팀에 배정됐어요. 진행자가 게임을 시작하면 자동으로 넘어갑니다.";
+        });
+        ch.on("broadcast", { event:"join-rejected" }, function(msg){
+          var p=msg.payload||{};
+          if(p.clientId!==client.id) return;
+          client.assignPending=false;
+          if(client.team && (!p.team || client.team===p.team)){
+            client.team="";
+            try{ client.ch.track({ nick:client.nick, team:"" }); }catch(e){}
+          }
+          clientFillTeams();
+          rtEl("clientTeamMsg").textContent=p.msg || "그 팀에 들어갈 수 없어요. 다른 팀을 선택해 주세요.";
+          /* 최신 인원 현황을 다시 받아 마감 표시를 갱신한다 (teamsLoaded를 풀어 재요청) */
+          client.teamsLoaded = client.teamNames.length ? true : false;
+          try{ client.ch.send({ type:"broadcast", event:"teams-request", payload:{ clientId:client.id } }); }catch(e){}
         });
         ch.on("broadcast", { event:"state" }, function(msg){ clientOnState(msg.payload||{}); });
         ch.on("broadcast", { event:"rep-result" }, function(msg){ clientOnRepResult(msg.payload||{}); });
@@ -2251,7 +2438,23 @@
       if(!client.ch) return;
       if(!client.teamsLoaded || !client.teamNames.length){
         rtEl("clientTeamMsg").textContent="팀 목록을 아직 불러오지 못했어요. 잠시 기다렸다가 다시 눌러 주세요.";
-        clientRequestTeamsWithRetry();
+        client.teamsLoaded=false; clientRequestTeamsWithRetry();
+        return;
+      }
+      /* 3. 자동 배분: 팀을 고르지 않고 Host 배정을 요청한다. 확정은 team-assigned 응답으로 온다. */
+      if(client.joinMode==="auto"){
+        if(client.team){ rtEl("clientTeamMsg").textContent="이미 '"+client.team+"' 팀으로 배정됐어요."; return; }
+        if(client.assignPending) return;
+        client.assignPending=true;
+        clientFillTeams();
+        rtEl("clientTeamMsg").textContent="배정을 요청했어요. 잠시만 기다려 주세요…";
+        client.ch.send({ type:"broadcast", event:"join", payload:{ clientId:client.id, nick:client.nick, team:"", auto:true } });
+        setTimeout(function(){
+          if(client.assignPending && !client.team){
+            client.assignPending=false; clientFillTeams();
+            rtEl("clientTeamMsg").textContent="배정 응답이 늦어지고 있어요. 버튼을 한 번 더 눌러 주세요.";
+          }
+        }, 4000);
         return;
       }
       var chosen=rtEl("clientTeamSel").value;
@@ -2259,6 +2462,14 @@
         rtEl("clientTeamMsg").textContent="목록에서 팀을 선택한 뒤 참가 확정을 눌러 주세요.";
         return;
       }
+      /* 2. 인원 제한: 화면에 보이는 인원 기준으로도 먼저 막는다 (최종 판정은 Host가 한다) */
+      if(client.joinMode==="limit" && chosen!==client.team && clientTeamCount(chosen) >= client.maxPerTeam){
+        rtEl("clientTeamMsg").textContent="'"+chosen+"' 팀이 정원("+client.maxPerTeam+"명)을 다 찼어요. 다른 팀을 선택해 주세요.";
+        try{ client.ch.send({ type:"broadcast", event:"teams-request", payload:{ clientId:client.id } }); }catch(e){}
+        return;
+      }
+      /* 자유 선택·제한 통과: 일단 낙관적으로 확정 표시하되, Host가 만석으로 거절하면
+         join-rejected 핸들러가 팀을 비우고 다시 고르게 안내한다. */
       client.team=chosen;
       client.ch.track({ nick:client.nick, team:client.team });
       client.ch.send({ type:"broadcast", event:"join", payload:{ clientId:client.id, nick:client.nick, team:client.team } });
@@ -2342,7 +2553,7 @@
         rtEl("repZone").hidden=true; rtEl("cheerZone").hidden=true;
         if(!client.team){
           showView("client");
-          rtEl("clientTeamMsg").textContent="게임이 시작됐어요! 먼저 팀 선택을 확정해 주세요.";
+          rtEl("clientTeamMsg").textContent = client.joinMode==="auto" ? "게임이 시작됐어요! 먼저 아래 버튼으로 팀 배정을 받아 주세요." : "게임이 시작됐어요! 먼저 팀 선택을 확정해 주세요.";
           return;
         }
         client.repMode=!!p.repMode; client.isRep=false;
