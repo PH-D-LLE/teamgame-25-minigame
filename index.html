@@ -75,6 +75,8 @@
       .bigbtn{ display:block; width:100%; min-height:64px; border:none; border-radius:16px; background:var(--accent); color:#fff; font-size:20px; font-weight:900; padding:14px; }
       .bigbtn:active{ filter:brightness(.92); }
       .bigbtn.blue{ background:var(--c2); } .bigbtn.teal{ background:var(--c3); } .bigbtn.ghost{ background:var(--surface2); color:var(--ink); }
+      .bigbtn:disabled{ opacity:.55; cursor:not-allowed; }
+      select.rt-input:disabled{ opacity:.65; cursor:wait; }
       .center-msg{ text-align:center; padding:26px 8px; }
       .center-msg .emoji{ font-size:52px; line-height:1.2; }
       .center-msg h3{ font-family:"Jua",sans-serif; font-weight:400; font-size:24px; margin:8px 0 4px; }
@@ -1961,6 +1963,9 @@
           if(p.clientId){ host.players[p.clientId]={ nick:p.nick, team:p.team, score:host.players[p.clientId]?host.players[p.clientId].score:null, fin:false }; }
           hostBroadcastTeams(); hostRenderPlayers();
         });
+        ch.on("broadcast", { event:"teams-request" }, function(msg){
+          hostBroadcastTeams();
+        });
         ch.on("broadcast", { event:"score" }, function(msg){
           var p=msg.payload||{}; if(!p.clientId) return;
           var cur=host.players[p.clientId]||{ nick:p.nick, team:p.team };
@@ -2125,16 +2130,44 @@
     /* ================= CLIENT ================= */
     var client = {
       sb:null, ch:null, id:rtUid(), code:"", nick:"", team:"",
-      teamNames:["1팀","2팀","3팀","4팀","5팀","6팀","7팀","8팀","9팀","10팀"],
+      teamNames:[],
+      teamsLoaded:false, teamsReqTimers:[],
       inGame:false, lastScore:0, lastSent:null, finalSent:false,
       scoreTimer:null, watchTimer:null, repMode:false, isRep:false, scanner:null
     };
     function clientFillTeams(){
-      var sel=rtEl("clientTeamSel"); var prev=sel.value; sel.innerHTML="";
+      var sel=rtEl("clientTeamSel"); var btn=rtEl("clientTeamBtn"); var msg=rtEl("clientTeamMsg");
+      var prev=sel.value;
+      sel.innerHTML="";
+      if(!client.teamsLoaded || !client.teamNames.length){
+        var lo=document.createElement("option"); lo.value=""; lo.textContent="팀 목록을 불러오는 중…"; sel.appendChild(lo);
+        sel.disabled=true;
+        if(btn) btn.disabled=true;
+        if(msg && !rtEl("clientWaitPanel").hidden) msg.textContent="진행자가 설정한 팀 목록을 불러오는 중이에요. 잠시만 기다려 주세요.";
+        return;
+      }
+      sel.disabled=false;
+      if(btn) btn.disabled=false;
       client.teamNames.forEach(function(name){
         var o=document.createElement("option"); o.value=name; o.textContent=name; sel.appendChild(o);
       });
       if(prev && client.teamNames.indexOf(prev)>=0) sel.value=prev;
+      else if(client.team && client.teamNames.indexOf(client.team)>=0) sel.value=client.team;
+    }
+    function clientClearTeamsReqTimers(){
+      client.teamsReqTimers.forEach(function(t){ clearTimeout(t); });
+      client.teamsReqTimers=[];
+    }
+    function clientRequestTeams(){
+      if(!client.ch || client.teamsLoaded) return;
+      try{ client.ch.send({ type:"broadcast", event:"teams-request", payload:{ clientId:client.id } }); }catch(e){}
+    }
+    function clientRequestTeamsWithRetry(){
+      clientClearTeamsReqTimers();
+      clientRequestTeams();
+      [600, 1800, 3500].forEach(function(ms){
+        client.teamsReqTimers.push(setTimeout(clientRequestTeams, ms));
+      });
     }
     clientFillTeams();
 
@@ -2167,12 +2200,29 @@
       try{
         if(client.sb){ try{ client.sb.removeAllChannels(); }catch(e){} }
         client.sb=rtMakeClient(url, key); client.code=code; client.nick=nick;
+        client.teamsLoaded=false; client.teamNames=[]; clientClearTeamsReqTimers(); clientFillTeams();
         rtSetStatus("clientDot","clientStatus","wait","방 "+code+" 에 연결 중…");
         var ch=client.sb.channel("minigame-room-"+code, { config:{ broadcast:{ self:false }, presence:{ key:client.id } } });
         client.ch=ch;
         ch.on("broadcast", { event:"teams" }, function(msg){
           var t=(msg.payload||{}).teams;
-          if(t && t.length){ client.teamNames=t.slice(0,10); clientFillTeams(); }
+          if(t && t.length){
+            var wasFirstLoad=!client.teamsLoaded;
+            client.teamNames=t.slice(0,10);
+            client.teamsLoaded=true;
+            clientClearTeamsReqTimers();
+            var confirmedMissing = client.team && client.teamNames.indexOf(client.team)<0;
+            if(confirmedMissing){
+              client.team="";
+              try{ client.ch.track({ nick:client.nick, team:"" }); }catch(e){}
+            }
+            clientFillTeams();
+            if(confirmedMissing){
+              rtEl("clientTeamMsg").textContent="진행자 팀 목록이 바뀌어 이전에 고른 팀이 없어요. 팀을 다시 선택해 참가 확정을 눌러 주세요.";
+            } else if(wasFirstLoad && !client.team){
+              rtEl("clientTeamMsg").textContent="팀을 고르고 참가 확정을 눌러 주세요.";
+            }
+          }
         });
         ch.on("broadcast", { event:"state" }, function(msg){ clientOnState(msg.payload||{}); });
         ch.on("broadcast", { event:"rep-result" }, function(msg){ clientOnRepResult(msg.payload||{}); });
@@ -2183,6 +2233,8 @@
             rtEl("clientWaitPanel").hidden=false;
             rtEl("clientRoomEcho").textContent=code;
             var d2ok=rtEl("clientDot2"); if(d2ok) d2ok.className="dot ok";
+            client.teamsLoaded=false; clientFillTeams();
+            clientRequestTeamsWithRetry();
             if(client.team && client.ch){ client.ch.track({ nick:client.nick, team:client.team }); }
           } else if(status==="CHANNEL_ERROR"||status==="TIMED_OUT"||status==="CLOSED"){
             rtSetStatus("clientDot","clientStatus","err","연결이 끊겼어요. 자동 재접속을 시도 중입니다. 화면을 끄지 말고 기다려 주세요.");
@@ -2197,7 +2249,17 @@
 
     rtEl("clientTeamBtn").addEventListener("click", function(){
       if(!client.ch) return;
-      client.team=rtEl("clientTeamSel").value;
+      if(!client.teamsLoaded || !client.teamNames.length){
+        rtEl("clientTeamMsg").textContent="팀 목록을 아직 불러오지 못했어요. 잠시 기다렸다가 다시 눌러 주세요.";
+        clientRequestTeamsWithRetry();
+        return;
+      }
+      var chosen=rtEl("clientTeamSel").value;
+      if(!chosen || client.teamNames.indexOf(chosen)<0){
+        rtEl("clientTeamMsg").textContent="목록에서 팀을 선택한 뒤 참가 확정을 눌러 주세요.";
+        return;
+      }
+      client.team=chosen;
       client.ch.track({ nick:client.nick, team:client.team });
       client.ch.send({ type:"broadcast", event:"join", payload:{ clientId:client.id, nick:client.nick, team:client.team } });
       rtEl("clientTeamMsg").textContent="✓ '"+client.team+"' 팀으로 참가했어요. 진행자가 게임을 시작하면 자동으로 넘어갑니다.";
