@@ -211,6 +211,18 @@
       .code-big{ font-family:"Jua",sans-serif; font-size:clamp(44px,10vw,64px); letter-spacing:.14em; text-align:center; line-height:1.15; }
       .qr-box{ display:flex; justify-content:center; padding:10px 0 4px; }
       .qr-box svg,.qr-box img{ width:200px; height:200px; background:#fff; border-radius:12px; padding:8px; }
+      .qr-show-btn{ margin-top:14px; }
+      /* QR 전체화면 (참가자 안내용) */
+      #qrFull{ position:fixed; inset:0; z-index:9999; background:#ffffff; color:#182233; display:flex; align-items:center; justify-content:center; padding:24px 16px; overflow:auto; }
+      #qrFull[hidden]{ display:none; }
+      .qr-full-inner{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; width:100%; max-width:720px; text-align:center; }
+      .qr-full-label{ font-size:clamp(18px,3.4vw,26px); font-weight:800; letter-spacing:.18em; color:#5b6879; }
+      .qr-full-code{ font-family:"Jua",sans-serif; font-size:clamp(76px,19vw,168px); line-height:1; letter-spacing:.12em; color:#182233; font-variant-numeric:tabular-nums; }
+      .qr-full-qr{ display:flex; justify-content:center; align-items:center; }
+      .qr-full-qr svg,.qr-full-qr img{ width:min(58vw,52vh,460px); height:min(58vw,52vh,460px); background:#fff; }
+      .qr-full-close{ position:fixed; top:16px; right:16px; z-index:10000; min-height:52px; padding:0 20px; border-radius:999px; border:2px solid #dde3ec; background:#182233; color:#ffffff; font-size:16px; font-weight:800; box-shadow:0 6px 20px rgba(24,34,51,.18); }
+      .qr-full-close:active{ filter:brightness(1.15); }
+      @media (max-height:560px){ .qr-full-code{ font-size:clamp(56px,14vh,96px); } .qr-full-qr svg,.qr-full-qr img{ width:min(52vw,44vh,360px); height:min(52vw,44vh,360px); } }
       .join-link{ display:block; text-align:center; font-weight:700; font-size:14.5px; word-break:break-all; color:var(--c2); margin-top:6px; }
       .team-edit-row{ display:flex; gap:8px; margin-bottom:8px; align-items:center; }
       .team-edit-row .swatch{ width:18px; height:18px; border-radius:6px; flex:none; }
@@ -317,6 +329,18 @@
           <div class="qr-box" id="hostQr"></div>
           <a class="join-link" id="hostJoinLink" href="#" target="_blank" rel="noopener"></a>
           <p class="note" style="text-align:center;">QR에는 숫자만 담는 게 아니라, 위 접속 주소 전체가 들어 있어요. 참가자는 연결 정보를 입력할 필요 없이 바로 입장할 수 있어요.</p>
+          <button class="bigbtn blue qr-show-btn" id="hostQrShowBtn" type="button">⛶ 전체화면으로 QR 보여주기</button>
+          <p class="note" style="text-align:center; margin-top:8px; margin-bottom:0;">참가자에게 보여줄 때 누르세요. 화면에는 QR과 방 코드만 크게 표시됩니다.</p>
+        </div>
+
+        <!-- QR 전체화면: QR과 방 코드만 표시 -->
+        <div id="qrFull" hidden role="dialog" aria-modal="true" aria-label="참가자 입장 QR 전체화면">
+          <button class="qr-full-close" id="qrFullClose" type="button" aria-label="전체화면 닫기">✕ 닫기</button>
+          <div class="qr-full-inner">
+            <div class="qr-full-label">방 코드</div>
+            <div class="qr-full-code" id="qrFullCode">------</div>
+            <div class="qr-full-qr" id="qrFullQr"></div>
+          </div>
         </div>
 
         <div class="rt-panel" id="hostTeamPanel" hidden>
@@ -1985,11 +2009,46 @@
         if(typeof qrcode!=="undefined"){
           var qr=qrcode(0,"M"); qr.addData(joinUrl); qr.make();
           box.innerHTML=qr.createSvgTag({ cellSize:6, margin:8, scalable:true });
+          syncQrFull();
           return;
         }
       }catch(e){}
       box.appendChild(h("p","note","QR을 만들지 못했어요. 참가자에게 위 접속 주소를 열라고 하거나 방 코드를 직접 알려 주세요."));
+      syncQrFull();
     }
+    /* ---- QR 전체화면 (QR + 방 코드만) ---- */
+    function syncQrFull(){
+      var full=rtEl("qrFull"); if(!full || full.hidden) return;
+      var codeEl=rtEl("qrFullCode"); if(codeEl && host.code) codeEl.textContent=host.code;
+      var dst=rtEl("qrFullQr"), src=rtEl("hostQr");
+      if(dst && src) dst.innerHTML=src.innerHTML;
+    }
+    function openQrFull(){
+      if(!host.code){ rtSetStatus("hostDot","hostStatus","err","먼저 방을 만들어 주세요."); return; }
+      if(!rtEl("hostQr").innerHTML) hostRenderQr();
+      var full=rtEl("qrFull");
+      rtEl("qrFullCode").textContent=host.code;
+      rtEl("qrFullQr").innerHTML=rtEl("hostQr").innerHTML;
+      full.hidden=false;
+      document.body.style.overflow="hidden";
+      try{
+        var p = full.requestFullscreen ? full.requestFullscreen() : (document.documentElement.requestFullscreen ? document.documentElement.requestFullscreen() : null);
+        if(p && p.catch) p.catch(function(){});
+      }catch(e){}
+      var closeBtn=rtEl("qrFullClose"); if(closeBtn) closeBtn.focus();
+    }
+    function closeQrFull(){
+      var full=rtEl("qrFull"); if(!full || full.hidden) return;
+      full.hidden=true;
+      document.body.style.overflow="";
+      try{ if(document.fullscreenElement && document.exitFullscreen) document.exitFullscreen(); }catch(e){}
+      var showBtn=rtEl("hostQrShowBtn"); if(showBtn) showBtn.focus();
+    }
+    rtEl("hostQrShowBtn").addEventListener("click", openQrFull);
+    rtEl("qrFullClose").addEventListener("click", closeQrFull);
+    document.addEventListener("keydown", function(e){
+      if((e.key==="Escape" || e.key==="Esc") && !rtEl("qrFull").hidden) closeQrFull();
+    });
     rtEl("hostJoinUrl").addEventListener("input", function(){ if(host.code) hostRenderQr(); });
     rtEl("hostCreateBtn").addEventListener("click", hostConnect);
     rtEl("hostReconnect").addEventListener("click", hostConnect);
