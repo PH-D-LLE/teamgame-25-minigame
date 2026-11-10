@@ -229,6 +229,18 @@
       .team-edit-row{ display:flex; gap:8px; margin-bottom:8px; align-items:center; }
       .team-edit-row .swatch{ width:18px; height:18px; border-radius:6px; flex:none; }
       .team-edit-row input{ flex:1; min-height:48px; border:2px solid var(--line); border-radius:10px; padding:0 12px; font-size:16px; background:var(--surface); color:var(--ink); min-width:0; }
+      .team-edit-row .cap-lab{ font-size:13px; font-weight:700; color:var(--ink-soft); white-space:nowrap; flex:none; }
+      .team-edit-row input.cap-input{ flex:none; width:84px; text-align:center; font-weight:800; }
+      /* 진행자 비밀번호 게이트 (참가자 화면 잠금) */
+      #pwGate{ position:fixed; inset:0; z-index:10001; background:rgba(16,20,28,.55); display:flex; align-items:center; justify-content:center; padding:18px; }
+      #pwGate[hidden]{ display:none; }
+      .pw-card{ background:var(--surface); color:var(--ink); border:1px solid var(--line); border-radius:18px; box-shadow:var(--shadow); padding:22px; width:100%; max-width:420px; }
+      .pw-card h3{ font-family:"Jua",sans-serif; font-weight:400; font-size:24px; margin:0 0 6px; }
+      .pw-card p{ color:var(--ink-soft); font-size:14.5px; margin:0 0 14px; line-height:1.55; }
+      .pw-err{ color:var(--bad); font-weight:700; font-size:14.5px; min-height:22px; margin-top:8px; }
+      .pw-btns{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:14px; }
+      .pw-btns button{ min-height:54px; border-radius:12px; font-size:16.5px; font-weight:800; border:2px solid var(--line); background:var(--surface); color:var(--ink); }
+      .pw-btns .primary{ background:var(--accent); border-color:var(--accent); color:#fff; }
       .seg{ display:flex; gap:8px; }
       .seg button{ flex:1; min-height:50px; border:2px solid var(--line); border-radius:12px; background:var(--surface); color:var(--ink); font-size:16px; font-weight:800; }
       .seg button.on{ background:var(--ink); color:var(--bg); border-color:var(--ink); }
@@ -316,6 +328,11 @@
             <label for="hostJoinUrl">참가자 접속 주소 — QR에 들어가는 공개 주소예요. 참가자가 실제로 접속하는 주소와 같아야 해요</label>
             <input class="rt-input" id="hostJoinUrl" type="text" value="https://teamgame-25-minigame-ph-d-lles-projects.vercel.app/" autocomplete="off" />
           </div>
+          <div class="field">
+            <label for="hostPassword">진행자 비밀번호 — 참가자가 모드 선택·게임 목록으로 이동할 때 필요해요</label>
+            <input class="rt-input" id="hostPassword" type="password" placeholder="예: 1234 · 비워 두면 참가자는 진행자 화면으로 이동할 수 없어요" autocomplete="new-password" />
+            <p class="note" style="margin-top:6px; margin-bottom:0;">참가자 폰에서는 이 비밀번호를 입력해야만 모드 선택·게임 목록·진행자 화면으로 넘어갈 수 있어요. 방을 만든 뒤에 바꿔도 참가자 화면에 바로 반영됩니다. 현장에서 실수로 들어가는 것을 막는 가벼운 잠금이에요.</p>
+          </div>
           <button class="bigbtn" id="hostCreateBtn" type="button">방 만들기</button>
           <div class="status-line"><span class="dot" id="hostDot"></span><span id="hostStatus">아직 연결되지 않았어요.</span></div>
           <div class="warn-box">
@@ -355,9 +372,10 @@
           </div>
           <p class="note" id="hostJoinModeDesc" style="margin-top:8px;">자유 선택 (기본) · 참가자가 원하는 팀을 직접 고릅니다. 인원 제한이 없어 지금과 같은 방식이에요.</p>
           <div class="field" id="hostCapField" hidden>
-            <label for="hostMaxPerTeam">팀당 최대 인원 (명)</label>
+            <label for="hostMaxPerTeam">팀당 기본 최대 인원 (명) — 모든 팀에 공통 적용되는 기본값</label>
             <input class="rt-input" id="hostMaxPerTeam" type="number" inputmode="numeric" min="1" max="100" step="1" value="10" />
             <p class="note" style="margin-top:6px; margin-bottom:0;">예: 참가자 100명 · 10팀이면 팀당 10명이 적당해요. 꽉 찬 팀은 참가자 화면에서 마감으로 표시되어 고를 수 없어요.</p>
+            <p class="note" style="margin-top:4px; margin-bottom:0;"><b>팀별 정원</b> · 아래 팀 목록에서 팀마다 정원을 따로 정할 수도 있어요. 팀 행의 정원 칸에 숫자를 넣으면 그 팀만 그 인원으로 적용되고, 비워 두면 위 기본값이 적용됩니다.</p>
           </div>
           <div id="hostTeamList" style="margin-top:14px;"></div>
           <button class="mini-btn" id="hostTeamAdd" type="button">+ 팀 추가</button>
@@ -500,6 +518,23 @@
           </div>
         </div>
       </section>
+
+      <!-- 진행자 비밀번호 게이트: 참가자 잠금 상태에서 모드 선택·게임 목록·진행자 화면으로 이동할 때 표시 -->
+      <div id="pwGate" hidden role="dialog" aria-modal="true" aria-label="진행자 비밀번호 확인">
+        <div class="pw-card">
+          <h3>🔒 진행자 비밀번호</h3>
+          <p id="pwGateDesc">참가자는 모드 선택·게임 목록으로 이동할 수 없어요. 진행자가 설정한 비밀번호를 입력하면 이동할 수 있습니다.</p>
+          <div class="field" style="margin-bottom:0;">
+            <label for="pwGateInput">비밀번호</label>
+            <input class="rt-input" id="pwGateInput" type="password" placeholder="진행자 비밀번호 입력" autocomplete="off" />
+          </div>
+          <div class="pw-err" id="pwGateErr"></div>
+          <div class="pw-btns">
+            <button type="button" id="pwGateCancel">취소</button>
+            <button type="button" class="primary" id="pwGateOk">확인하고 이동</button>
+          </div>
+        </div>
+      </div>
 
       <footer>1단계 1인용 데모 + 2단계 실시간 프로토타입 · 실시간 점수는 Broadcast로만 중계하고 저장하지 않습니다</footer>
     </div>
@@ -686,6 +721,11 @@
     }
     function openGame(id){
       var g=gameById(id); if(!g) return;
+      /* 참가자 잠금: 실시간 게임 진입(rtLaunching)이 아닌데 잠금 상태면 비밀번호 게이트를 먼저 띄운다 */
+      if(window.__participantLocked && !window.__participantUnlocked && !window.__rtLaunching){
+        if(typeof window.__requestUnlock==="function") window.__requestUnlock("game", id);
+        return;
+      }
       stopActiveGame();
       currentGame=g; lastResult=null;
       showView("game");
@@ -1816,9 +1856,93 @@
       if(ck && ck.value!==DEFAULT_SUPABASE_KEY) ck.value=DEFAULT_SUPABASE_KEY;
     })();
 
+    /* ================= 참가자 잠금 + 진행자 비밀번호 =================
+       - QR(?room=)로 들어왔거나 방에 입장한 기기는 '참가자 잠금' 상태가 된다.
+       - 잠금 상태에서는 모드 선택·게임 목록(home)·팀 점수판(board)·진행자(host)
+         화면으로 이동할 수 없고, 진행자가 설정한 비밀번호를 입력해야 해제된다.
+       - 비밀번호 자체는 보내지 않고 해시만 Broadcast로 전달하는 가벼운 잠금이다.
+       - 진행자가 비밀번호를 설정하지 않았으면(hasPw=false) 해제는 불가능하다. */
+    function pwHashOf(s){
+      var hh=5381, str=String(s||"");
+      for(var i=0;i<str.length;i++){ hh=((hh<<5)+hh+str.charCodeAt(i))>>>0; hh=(hh*33 ^ str.charCodeAt(i))>>>0; }
+      return "h"+hh.toString(16)+"-"+str.length;
+    }
+    var participantLock = {
+      active:false,        // 이 기기가 참가자로 잠겼는지
+      unlocked:false,      // 비밀번호로 해제했는지 (이 세션에서만 유지)
+      hasPw:null,          // 진행자가 비밀번호를 설정했는지 (null=아직 모름)
+      pwHash:"",           // 진행자 비밀번호 해시 (Broadcast로 수신)
+      pendingView:null,    // 해제 후 이동할 화면
+      pendingGame:null     // 해제 후 열 게임 id
+    };
+    function syncLockGlobals(){
+      window.__participantLocked = participantLock.active;
+      window.__participantUnlocked = participantLock.unlocked;
+    }
+    function activateParticipantLock(){
+      if(participantLock.active) return;
+      participantLock.active=true; syncLockGlobals();
+      var cb=rtEl("clientBack");
+      if(cb) cb.textContent="🔒 모드 선택으로 (진행자 비밀번호 필요)";
+    }
+    window.__requestUnlock = function(view, gameId){
+      participantLock.pendingView=view||"home";
+      participantLock.pendingGame=gameId||null;
+      openPwGate();
+    };
+    function openPwGate(){
+      var gate=rtEl("pwGate"), inp=rtEl("pwGateInput"), err=rtEl("pwGateErr"), desc=rtEl("pwGateDesc"), ok=rtEl("pwGateOk");
+      if(!gate) return;
+      err.textContent="";
+      if(inp) inp.value="";
+      if(participantLock.hasPw===false){
+        desc.textContent="진행자가 비밀번호를 설정하지 않아서 모드 선택·게임 목록으로 이동할 수 없어요. 진행자에게 문의해 주세요.";
+        if(inp) inp.disabled=true; if(ok) ok.disabled=true;
+      } else if(participantLock.hasPw===null){
+        desc.textContent="진행자 정보를 아직 불러오지 못했어요. 방에 입장하면 비밀번호를 확인할 수 있습니다. 먼저 참가자 화면에서 입장해 주세요.";
+        if(inp) inp.disabled=true; if(ok) ok.disabled=true;
+      } else {
+        desc.textContent="참가자는 모드 선택·게임 목록으로 이동할 수 없어요. 진행자가 설정한 비밀번호를 입력하면 이동할 수 있습니다.";
+        if(inp) inp.disabled=false; if(ok) ok.disabled=false;
+      }
+      gate.hidden=false;
+      if(inp && !inp.disabled){ try{ inp.focus(); }catch(e){} }
+    }
+    function closePwGate(){
+      var gate=rtEl("pwGate"); if(gate) gate.hidden=true;
+      participantLock.pendingView=null; participantLock.pendingGame=null;
+    }
+    function tryPwGate(){
+      var inp=rtEl("pwGateInput"), err=rtEl("pwGateErr");
+      var v=inp ? inp.value : "";
+      if(!v){ err.textContent="비밀번호를 입력해 주세요."; return; }
+      if(participantLock.hasPw && pwHashOf(v)===participantLock.pwHash){
+        participantLock.unlocked=true; syncLockGlobals();
+        var pv=participantLock.pendingView, pg=participantLock.pendingGame;
+        closePwGate();
+        var cb=rtEl("clientBack"); if(cb) cb.textContent="← 모드 선택으로";
+        if(pg){ openGame(pg); }
+        else showView(pv||"home");
+      } else {
+        err.textContent="비밀번호가 맞지 않아요. 진행자에게 확인해 주세요.";
+        if(inp){ inp.select(); }
+      }
+    }
+    rtEl("pwGateOk").addEventListener("click", tryPwGate);
+    rtEl("pwGateCancel").addEventListener("click", closePwGate);
+    rtEl("pwGateInput").addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); tryPwGate(); } });
+    syncLockGlobals();
+
     /* showView 확장: host / client / cresult 뷰 지원 */
     var __origShowView = showView;
     showView = function(v){
+      /* 참가자 잠금 가드: 잠금 상태(미해제)에서 보호 화면으로 이동하면 비밀번호 게이트를 띄우고 이동을 막는다.
+         실시간 게임 진입(window.__rtLaunching)과 참가자 화면(client/cresult)은 허용한다. */
+      if(participantLock.active && !participantLock.unlocked && !window.__rtLaunching &&
+         (v==="home"||v==="board"||v==="host"||v==="game")){
+        window.__requestUnlock(v==="game" ? "home" : v, null);
+        return;
+      }
       var hv=rtEl("viewHost"), cv=rtEl("viewClient"), rv=rtEl("viewClientResult");
       var mc={ solo:rtEl("modeSolo"), host:rtEl("modeHost"), client:rtEl("modeClient") };
       if(mc.solo) mc.solo.classList.toggle("on", v==="home");
@@ -1855,7 +1979,9 @@
     /* ================= HOST ================= */
     var host = {
       sb:null, ch:null, code:null, key:"", url:"",
+      password:"",           // 진행자 비밀번호 (평문은 이 기기에만 보관, Broadcast에는 해시만 전달)
       teamNames:["1팀","2팀","3팀","4팀"],
+      teamCaps:[null,null,null,null],  // 팀별 정원 (null=기본값 사용, 숫자=그 팀 전용 정원) · teamNames와 같은 순서
       players:{},            // clientId -> {nick, team, score, fin}
       presence:{},           // clientId -> {nick, team}
       playing:false, gameId:null, repMode:false,
@@ -1867,7 +1993,7 @@
     };
     var JOIN_MODE_DESCS = {
       free:"자유 선택 (기본) · 참가자가 원하는 팀을 직접 고릅니다. 인원 제한이 없어 지금과 같은 방식이에요.",
-      limit:"인원 제한 · 아래에서 정한 팀당 최대 인원까지만 들어갈 수 있어요. 꽉 찬 팀은 마감으로 표시되고, 동시에 마지막 자리를 누른 경우 늦은 참가자는 다시 고르게 안내합니다.",
+      limit:"인원 제한 · 팀당 기본 최대 인원까지만 들어갈 수 있고, 아래 팀 목록에서 팀마다 정원을 따로 정할 수도 있어요. 꽉 찬 팀은 마감으로 표시되고, 동시에 마지막 자리를 누른 경우 늦은 참가자는 다시 고르게 안내합니다.",
       auto:"자동 배분 · 참가자가 팀을 고르지 않고, 버튼을 누르면 그 순간 인원이 가장 적은 팀으로 자동 배정됩니다. 한쪽 팀에 몰리지 않아요."
     };
     /* presence + players(join 확정분)를 합친 팀별 인원. presence 반영이 늦어도
@@ -1886,6 +2012,26 @@
         if(t && counts.hasOwnProperty(t)){ counts[t]++; seen[id]=1; }
       });
       return counts;
+    }
+    /* 팀별 정원: 팀 행에서 따로 정한 값이 있으면 그 값, 없으면 팀당 기본값(maxPerTeam) */
+    function hostCapForIndex(i){
+      var c=host.teamCaps[i];
+      return (typeof c==="number" && c>0) ? c : host.maxPerTeam;
+    }
+    function hostCapForName(name){
+      var i=host.teamNames.indexOf(name);
+      return i<0 ? host.maxPerTeam : hostCapForIndex(i);
+    }
+    function hostCapsMap(){
+      var m={};
+      host.teamNames.forEach(function(n, i){ m[n]=hostCapForIndex(i); });
+      return m;
+    }
+    function hostHasPw(){ return !!(host.password && String(host.password).length>0); }
+    function hostPwHash(){ return hostHasPw() ? pwHashOf(host.password) : ""; }
+    function hostBroadcastPw(){
+      if(!host.ch) return;
+      try{ host.ch.send({ type:"broadcast", event:"host-pw", payload:{ hasPw:hostHasPw(), pwHash:hostPwHash() } }); }catch(e){}
     }
     function hostPickAutoTeam(excludeId){
       var counts=hostCombinedCounts(excludeId), best=null, bestCnt=null;
@@ -1911,6 +2057,7 @@
       var v=parseInt(rtEl("hostMaxPerTeam").value,10);
       if(!isNaN(v)) host.maxPerTeam=clamp(v,1,100);
       hostSyncJoinModeUI();
+      hostRenderTeams();
       hostBroadcastTeams();
     }
 
@@ -1925,13 +2072,35 @@
           hostBroadcastTeams(); hostRenderRace();
         });
         row.appendChild(inp);
+        if(host.joinMode==="limit"){
+          var capLab=h("span","cap-lab","정원"); row.appendChild(capLab);
+          var capInp=document.createElement("input");
+          capInp.type="number"; capInp.className="cap-input"; capInp.min="1"; capInp.max="100"; capInp.step="1"; capInp.inputMode="numeric";
+          capInp.placeholder=String(host.maxPerTeam);
+          capInp.value = (typeof host.teamCaps[i]==="number") ? host.teamCaps[i] : "";
+          capInp.title="이 팀만의 정원 · 비워 두면 팀당 기본값("+host.maxPerTeam+"명)이 적용돼요";
+          capInp.setAttribute("aria-label", name+" 정원 (비우면 기본값)");
+          (function(idx, el){
+            el.addEventListener("change", function(){
+              var raw=el.value.trim();
+              if(raw===""){ host.teamCaps[idx]=null; }
+              else {
+                var cv=parseInt(raw,10);
+                host.teamCaps[idx]=isNaN(cv)?null:clamp(cv,1,100);
+              }
+              hostRenderTeams(); hostBroadcastTeams();
+            });
+          })(i, capInp);
+          row.appendChild(capInp);
+        }
         var cnt=h("span",null,""); cnt.style.cssText="font-size:13px;color:var(--ink-soft);white-space:nowrap;";
         var cc=hostCombinedCounts(null), cnum=cc[name]||0;
-        cnt.textContent = host.joinMode==="limit" ? (cnum + " / " + host.maxPerTeam + "명" + (cnum>=host.maxPerTeam ? " · 마감" : "")) : (cnum + "명");
+        var capEff=hostCapForIndex(i);
+        cnt.textContent = host.joinMode==="limit" ? (cnum + " / " + capEff + "명" + (cnum>=capEff ? " · 마감" : "")) : (cnum + "명");
         row.appendChild(cnt);
         if(host.teamNames.length>1){
           var del=h("button","mini-btn","삭제"); del.type="button";
-          del.addEventListener("click", function(){ host.teamNames.splice(i,1); hostRenderTeams(); hostBroadcastTeams(); hostRenderRace(); });
+          del.addEventListener("click", function(){ host.teamNames.splice(i,1); host.teamCaps.splice(i,1); hostRenderTeams(); hostBroadcastTeams(); hostRenderRace(); });
           row.appendChild(del);
         }
         wrap.appendChild(row);
@@ -1942,6 +2111,7 @@
     rtEl("hostTeamAdd").addEventListener("click", function(){
       if(host.teamNames.length>=10) return;
       host.teamNames.push((host.teamNames.length+1)+"팀");
+      host.teamCaps.push(null);
       hostRenderTeams(); hostBroadcastTeams();
     });
 
@@ -2000,7 +2170,10 @@
         teams:host.teamNames.slice(),
         joinMode:host.joinMode,
         maxPerTeam:host.maxPerTeam,
-        counts:hostCombinedCounts(null)
+        caps:hostCapsMap(),
+        counts:hostCombinedCounts(null),
+        hasPw:hostHasPw(),
+        pwHash:hostPwHash()
       } });
     }
     rtEl("jmFree").addEventListener("click", function(){ hostSetJoinMode("free"); });
@@ -2016,6 +2189,13 @@
       var v=parseInt(rtEl("hostMaxPerTeam").value,10);
       host.maxPerTeam=isNaN(v)?10:clamp(v,1,100);
       rtEl("hostMaxPerTeam").value=host.maxPerTeam;
+      hostRenderTeams();
+      hostBroadcastTeams();
+    });
+    /* 진행자 비밀번호: 입력하면 Host 상태에 저장하고, 방이 열려 있으면 해시를 바로 방송한다 */
+    rtEl("hostPassword").addEventListener("input", function(){
+      host.password=rtEl("hostPassword").value;
+      hostBroadcastPw();
       hostBroadcastTeams();
     });
     hostSyncJoinModeUI();
@@ -2037,6 +2217,7 @@
     }
 
     function hostConnect(){
+      host.password=rtEl("hostPassword").value;
       var url=rtEl("hostUrl").value.trim(), key=rtEl("hostKey").value.trim();
       if(!key){ rtSetStatus("hostDot","hostStatus","err","Publishable key를 입력해 주세요."); return; }
       try{
@@ -2066,8 +2247,9 @@
              동시에 마지막 자리를 누른 경우에도 Host 판정 기준으로 늦은 쪽이 안내를 받는다. */
           if(host.joinMode==="limit" && p.team){
             var counts=hostCombinedCounts(p.clientId);
-            if((counts[p.team]||0) >= host.maxPerTeam){
-              ch.send({ type:"broadcast", event:"join-rejected", payload:{ clientId:p.clientId, team:p.team, reason:"full", cap:host.maxPerTeam, msg:"'"+p.team+"' 팀이 정원("+host.maxPerTeam+"명)을 다 찼어요. 다른 팀을 선택해 주세요." } });
+            var teamCap=hostCapForName(p.team);
+            if((counts[p.team]||0) >= teamCap){
+              ch.send({ type:"broadcast", event:"join-rejected", payload:{ clientId:p.clientId, team:p.team, reason:"full", cap:teamCap, msg:"'"+p.team+"' 팀이 정원("+teamCap+"명)을 다 찼어요. 다른 팀을 선택해 주세요." } });
               hostBroadcastTeams();
               return;
             }
@@ -2077,6 +2259,10 @@
           hostBroadcastTeams(); hostRenderPlayers(); hostRenderTeams();
         });
         ch.on("broadcast", { event:"teams-request" }, function(msg){
+          hostBroadcastTeams();
+        });
+        ch.on("broadcast", { event:"pw-request" }, function(msg){
+          hostBroadcastPw();
           hostBroadcastTeams();
         });
         ch.on("broadcast", { event:"score" }, function(msg){
@@ -2107,7 +2293,7 @@
             rtEl("hostGamePanel").hidden=false; rtEl("hostRacePanel").hidden=false;
             rtEl("hostRoomCode").textContent=host.code;
             hostRenderQr(); hostRenderTeams(); hostRenderRace();
-            hostBroadcastTeams();
+            hostBroadcastTeams(); hostBroadcastPw();
             if(host.teamsTimer) clearInterval(host.teamsTimer);
             host.teamsTimer=setInterval(function(){ if(!host.playing) hostBroadcastTeams(); }, 4000);
           } else if(status==="CHANNEL_ERROR"||status==="TIMED_OUT"||status==="CLOSED"){
@@ -2247,14 +2433,19 @@
       teamsLoaded:false, teamsReqTimers:[],
       inGame:false, lastScore:0, lastSent:null, finalSent:false,
       scoreTimer:null, watchTimer:null, repMode:false, isRep:false, scanner:null,
-      joinMode:"free", maxPerTeam:10, teamCounts:{}, assignPending:false
+      joinMode:"free", maxPerTeam:10, teamCounts:{}, teamCaps:{}, assignPending:false
     };
     function clientTeamCount(name){
       var c=client.teamCounts ? client.teamCounts[name] : null;
       return (typeof c==="number") ? c : 0;
     }
+    /* 팀별 정원: 진행자가 팀마다 따로 정한 값이 있으면 그 값, 없으면 팀당 기본값 */
+    function clientCapFor(name){
+      var c=client.teamCaps ? client.teamCaps[name] : null;
+      return (typeof c==="number" && c>0) ? c : client.maxPerTeam;
+    }
     function clientTeamIsFull(name){
-      return client.joinMode==="limit" && name!==client.team && clientTeamCount(name) >= client.maxPerTeam;
+      return client.joinMode==="limit" && name!==client.team && clientTeamCount(name) >= clientCapFor(name);
     }
     function clientFillTeams(){
       var sel=rtEl("clientTeamSel"); var btn=rtEl("clientTeamBtn"); var msg=rtEl("clientTeamMsg");
@@ -2294,8 +2485,8 @@
       client.teamNames.forEach(function(name){
         var o=document.createElement("option"); o.value=name;
         if(client.joinMode==="limit"){
-          var cnt=clientTeamCount(name), full=clientTeamIsFull(name);
-          o.textContent=name+" ("+cnt+"/"+client.maxPerTeam+"명)"+(full?" · 마감":"");
+          var cnt=clientTeamCount(name), cap=clientCapFor(name), full=clientTeamIsFull(name);
+          o.textContent=name+" ("+cnt+"/"+cap+"명)"+(full?" · 마감":"");
           if(full) o.disabled=true;
         } else {
           o.textContent=name;
@@ -2355,7 +2546,7 @@
       try{
         if(client.sb){ try{ client.sb.removeAllChannels(); }catch(e){} }
         client.sb=rtMakeClient(url, key); client.code=code; client.nick=nick;
-        client.teamsLoaded=false; client.teamNames=[]; client.joinMode="free"; client.maxPerTeam=10; client.teamCounts={}; client.assignPending=false; clientClearTeamsReqTimers(); clientFillTeams();
+        client.teamsLoaded=false; client.teamNames=[]; client.joinMode="free"; client.maxPerTeam=10; client.teamCounts={}; client.teamCaps={}; client.assignPending=false; clientClearTeamsReqTimers(); clientFillTeams();
         rtSetStatus("clientDot","clientStatus","wait","방 "+code+" 에 연결 중…");
         var ch=client.sb.channel("minigame-room-"+code, { config:{ broadcast:{ self:false }, presence:{ key:client.id } } });
         client.ch=ch;
@@ -2364,7 +2555,9 @@
           var t=pay.teams;
           if(pay.joinMode) client.joinMode=pay.joinMode;
           if(typeof pay.maxPerTeam==="number" && pay.maxPerTeam>0) client.maxPerTeam=pay.maxPerTeam;
+          if(pay.caps) client.teamCaps=pay.caps;
           if(pay.counts) client.teamCounts=pay.counts;
+          if(typeof pay.hasPw==="boolean"){ participantLock.hasPw=pay.hasPw; participantLock.pwHash=pay.pwHash||""; }
           if(t && t.length){
             var wasFirstLoad=!client.teamsLoaded;
             client.teamNames=t.slice(0,10);
@@ -2388,6 +2581,10 @@
           } else {
             clientFillTeams();
           }
+        });
+        ch.on("broadcast", { event:"host-pw" }, function(msg){
+          var pp=msg.payload||{};
+          if(typeof pp.hasPw==="boolean"){ participantLock.hasPw=pp.hasPw; participantLock.pwHash=pp.pwHash||""; }
         });
         ch.on("broadcast", { event:"team-assigned" }, function(msg){
           var p=msg.payload||{};
@@ -2415,6 +2612,8 @@
         ch.on("broadcast", { event:"rep-result" }, function(msg){ clientOnRepResult(msg.payload||{}); });
         ch.subscribe(function(status){
           if(status==="SUBSCRIBED"){
+            activateParticipantLock();
+            try{ ch.send({ type:"broadcast", event:"pw-request", payload:{ clientId:client.id } }); }catch(e){}
             rtSetStatus("clientDot","clientStatus","ok","연결됨 · 팀을 선택해 주세요.");
             rtEl("clientJoinPanel").hidden=true;
             rtEl("clientWaitPanel").hidden=false;
@@ -2463,8 +2662,8 @@
         return;
       }
       /* 2. 인원 제한: 화면에 보이는 인원 기준으로도 먼저 막는다 (최종 판정은 Host가 한다) */
-      if(client.joinMode==="limit" && chosen!==client.team && clientTeamCount(chosen) >= client.maxPerTeam){
-        rtEl("clientTeamMsg").textContent="'"+chosen+"' 팀이 정원("+client.maxPerTeam+"명)을 다 찼어요. 다른 팀을 선택해 주세요.";
+      if(client.joinMode==="limit" && chosen!==client.team && clientTeamCount(chosen) >= clientCapFor(chosen)){
+        rtEl("clientTeamMsg").textContent="'"+chosen+"' 팀이 정원("+clientCapFor(chosen)+"명)을 다 찼어요. 다른 팀을 선택해 주세요.";
         try{ client.ch.send({ type:"broadcast", event:"teams-request", payload:{ clientId:client.id } }); }catch(e){}
         return;
       }
@@ -2490,8 +2689,10 @@
     function clientStartGame(gameId){
       if(!gameById(gameId)){ rtEl("clientWaitMsg").innerHTML="<b>진행자가 고른 게임을 찾지 못했어요.</b> 잠시 기다려 주세요."; return; }
       client.inGame=true; client.finalSent=false; client.lastScore=0; client.lastSent=null;
+      window.__rtLaunching=true;
       showView("game");
       openGame(gameId);
+      window.__rtLaunching=false;
       /* 결과 화면의 1인용 팀 기록 UI는 실시간 모드에서 숨김 */
       var ta=document.querySelector("#gResult .team-add"), rb=document.querySelector("#gResult .result-btns");
       if(ta) ta.style.display="none"; if(rb) rb.style.display="none";
@@ -2611,6 +2812,7 @@
       try{ code=parseRoomCode(window.location.search) || parseRoomCode(window.location.hash); }catch(e){}
       if(!code) return;
       rtEl("clientCode").value=code;
+      activateParticipantLock();
       showView("client");
       rtSetStatus("clientDot","clientStatus","wait","방 코드 "+code+" 가 입력됐어요. 닉네임을 적고 '방 입장하기'를 눌러 주세요.");
       var nick=rtEl("clientNick");
